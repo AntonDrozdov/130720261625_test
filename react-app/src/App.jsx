@@ -1,13 +1,28 @@
+import natureBanner from './assets/nature-banner.png';
 import RandomNumberFetcher from './components/RandomNumberFetcher';
 
 function App() {
   return (
-    <div style={{ fontFamily: 'Arial, sans-serif', display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#f0f2f5' }}>
-      <div style={{ width: '100%', maxWidth: 440, padding: 24, background: '#fff', borderRadius: 12, boxShadow: '0 12px 30px rgba(0,0,0,0.08)' }}>
-        <h1 style={{ marginBottom: 16, fontSize: 24 }}>Random Number API</h1>
+    <main className="page-shell">
+      <section className="nature-banner" aria-labelledby="nature-banner-title">
+        <img
+          className="nature-banner__image"
+          src={natureBanner}
+          alt="Горное озеро в окружении хвойного леса на рассвете"
+        />
+        <div className="nature-banner__overlay" />
+        <div className="nature-banner__content">
+          <span className="nature-banner__eyebrow">Ближе к природе</span>
+          <h1 id="nature-banner-title">Вдохни спокойствие</h1>
+          <p>Горы, лес и чистый воздух — небольшая пауза посреди насыщенного дня.</p>
+        </div>
+      </section>
+
+      <section className="api-card">
+        <h2>Random Number API</h2>
         <RandomNumberFetcher />
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }
 

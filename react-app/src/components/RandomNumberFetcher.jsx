@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-const API_URL = 'http://localhost:5000/api/random';
+const API_URL = '/api/random';
 
 export default function RandomNumberFetcher() {
   const [number, setNumber] = useState(null);

@@ -1,0 +1,7 @@
+backend/bin/
+backend/obj/
+backend/*.log
+
+react-app/node_modules/
+react-app/dist/
+react-app/*.log
