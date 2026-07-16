@@ -1,0 +1,27 @@
+name: mwworks-app
+
+services:
+  backend:
+    image: mwworks-backend:latest
+    container_name: mwworks-backend
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=mwworks;Username=postgres;Password=admin
+      ImageApi__UploadApiKey: change-this-key
+    ports:
+      - "5000:8080"
+    restart: unless-stopped
+
+  frontend:
+    image: mwworks-frontend:latest
+    container_name: mwworks-frontend
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+    restart: unless-stopped
+
+networks:
+  default:
+    name: danetwork
+    external: true

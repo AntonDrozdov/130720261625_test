@@ -30,11 +30,11 @@ const advantageItems = [
     alt: 'Оператор работает на современном станке для лазерной резки металла',
   },
   {
-    image: '/api/images/mwcraft-collection',
-    eyebrow: 'MetallWoodCraft',
+    image: '/api/images/mwworks-collection',
+    eyebrow: 'MWWorks',
     title: 'Создаём пространство для отдыха',
     description: 'Костровые чаши, мангалы, садовая мебель и качели в едином стиле — от проекта до готового изделия.',
-    alt: 'Коллекция MWCraft: костровая чаша, мангал, садовая мебель и качели',
+    alt: 'Коллекция MWWorks: костровая чаша, мангал, садовая мебель и качели',
   },
 ];
 
@@ -89,9 +89,9 @@ function App() {
   return (
     <main className="page-shell">
       <header className="site-header">
-        <a className="brand" href="#top" aria-label="MWCraft — на главную">
+        <a className="brand" href="#top" aria-label="MWWorks — на главную">
           <span className="brand__mark" aria-hidden="true"><i>M</i><i>W</i></span>
-          <span className="brand__name"><strong>MWCraft</strong><small>MetallWoodCraft</small></span>
+          <span className="brand__name"><strong>MWWorks</strong><small>Metal &amp; Wood Works</small></span>
         </a>
         <div className="site-header__actions">
           <a className="header-phone" href="tel:+78005552401">+7 (800) 555-24-01</a>
@@ -99,7 +99,7 @@ function App() {
         </div>
       </header>
 
-      <h1 className="sr-only">Изделия из металла и дерева на заказ: садовая мебель, мангалы, костровые чаши и качели MWCraft</h1>
+      <h1 className="sr-only">Изделия из металла и дерева на заказ: садовая мебель, мангалы, костровые чаши и качели MWWorks</h1>
 
       <section
         className="nature-banner"
@@ -224,7 +224,7 @@ function App() {
       </section>
 
       <section className="seo-intro" aria-labelledby="production-title">
-        <span className="section-label">Собственное производство MWCraft</span>
+        <span className="section-label">Собственное производство MWWorks</span>
         <h2 id="production-title">Металлические изделия для сада по индивидуальному проекту</h2>
         <div className="seo-intro__text">
           <p>Производим садовую мебель, мангалы, костровые чаши и качели из прочного металла и натурального дерева. Подбираем размеры, конструкцию и отделку под ваш участок, террасу или зону отдыха.</p>
@@ -233,9 +233,9 @@ function App() {
       </section>
 
       <footer className="site-footer">
-        <a className="brand" href="#top" aria-label="MWCraft — наверх">
+        <a className="brand" href="#top" aria-label="MWWorks — наверх">
           <span className="brand__mark" aria-hidden="true"><i>M</i><i>W</i></span>
-          <span className="brand__name"><strong>MWCraft</strong><small>MetallWoodCraft</small></span>
+          <span className="brand__name"><strong>MWWorks</strong><small>Metal &amp; Wood Works</small></span>
         </a>
         <p>Изделия из металла и дерева для вашего сада</p>
         <a href="tel:+78005552401">+7 (800) 555-24-01</a>

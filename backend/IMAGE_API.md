@@ -1,8 +1,8 @@
-# MWCraft image API
+# MWWorks image API
 
 ## PostgreSQL configuration
 
-Create an empty `mwcraft` database. The API creates the `site_images` table and
+Create an empty `mwworks` database. The API creates the `site_images` table and
 indexes automatically, then imports files from `SeedImages` when their slugs do
 not exist yet.
 
@@ -10,7 +10,7 @@ Do not keep production credentials in `appsettings.json`. Configure them with
 environment variables before starting the backend:
 
 ```powershell
-$env:ConnectionStrings__Postgres = 'Host=localhost;Port=5432;Database=mwcraft;Username=mwcraft;Password=<password>'
+$env:ConnectionStrings__Postgres = 'Host=localhost;Port=5432;Database=mwworks;Username=postgres;Password=<password>'
 $env:ImageApi__UploadApiKey = '<long-random-secret>'
 dotnet run --launch-profile http
 ```

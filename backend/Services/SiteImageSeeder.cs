@@ -4,11 +4,11 @@ public sealed class SiteImageSeeder(ISiteImageRepository repository, IWebHostEnv
 {
     private static readonly (string Slug, string FileName, string Alt, string Title, string Description)[] Images =
     [
-        ("mwcraft-collection", "mwcraft-collection.png", "Коллекция MWCraft: костровая чаша, мангал, садовая мебель и качели", "Изделия MWCraft из металла и дерева", "Коллекция изделий MWCraft для сада и загородного участка"),
-        ("individual-approach", "individual-approach.png", "Специалист обсуждает с заказчиком материалы и проект садовой мебели", "Индивидуальное проектирование MWCraft", "Разработка садовых изделий по требованиям заказчика"),
-        ("quality-control", "quality-control.png", "Специалист проверяет металлический каркас и деревянные детали кресла", "Контроль качества MWCraft", "Проверка качества изделий из металла и дерева"),
-        ("product-design", "product-design.png", "Промышленный дизайнер создаёт проект садовой мебели", "Проектирование изделий MWCraft", "Профессиональное проектирование садовой мебели"),
-        ("professional-equipment", "professional-equipment.png", "Оператор работает на станке для лазерной резки металла", "Профессиональное оборудование MWCraft", "Современное оборудование для производства металлических изделий")
+        ("mwworks-collection", "mwworks-collection.png", "Коллекция MWWorks: костровая чаша, мангал, садовая мебель и качели", "Изделия MWWorks из металла и дерева", "Коллекция изделий MWWorks для сада и загородного участка"),
+        ("individual-approach", "individual-approach.png", "Специалист обсуждает с заказчиком материалы и проект садовой мебели", "Индивидуальное проектирование MWWorks", "Разработка садовых изделий по требованиям заказчика"),
+        ("quality-control", "quality-control.png", "Специалист проверяет металлический каркас и деревянные детали кресла", "Контроль качества MWWorks", "Проверка качества изделий из металла и дерева"),
+        ("product-design", "product-design.png", "Промышленный дизайнер создаёт проект садовой мебели", "Проектирование изделий MWWorks", "Профессиональное проектирование садовой мебели"),
+        ("professional-equipment", "professional-equipment.png", "Оператор работает на станке для лазерной резки металла", "Профессиональное оборудование MWWorks", "Современное оборудование для производства металлических изделий")
     ];
 
     public async Task SeedAsync(CancellationToken cancellationToken = default)
