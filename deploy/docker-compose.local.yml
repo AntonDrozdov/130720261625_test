@@ -6,7 +6,7 @@ services:
     container_name: mwworks-backend
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=mwworks;Username=postgres;Password=Tgbyhn123
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=mwworks;Username=postgres;Password=admin
       ImageApi__UploadApiKey: change-this-key
     ports:
       - "5000:8080"
