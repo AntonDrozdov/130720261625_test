@@ -1,6 +1,0 @@
-bin/
-obj/
-*.log
-.git/
-.vs/
-.vscode/

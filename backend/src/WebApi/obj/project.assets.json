@@ -2949,11 +2949,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "c:\\git\\mwworks\\backend\\src\\WebApi\\WebApi.csproj",
+      "projectUniqueName": "C:\\git\\mwworks\\backend\\src\\WebApi\\WebApi.csproj",
       "projectName": "WebApi",
-      "projectPath": "c:\\git\\mwworks\\backend\\src\\WebApi\\WebApi.csproj",
+      "projectPath": "C:\\git\\mwworks\\backend\\src\\WebApi\\WebApi.csproj",
       "packagesPath": "C:\\Users\\user\\.nuget\\packages\\",
-      "outputPath": "c:\\git\\mwworks\\backend\\src\\WebApi\\obj\\",
+      "outputPath": "C:\\git\\mwworks\\backend\\src\\WebApi\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "C:\\Users\\user\\AppData\\Roaming\\NuGet\\NuGet.Config"
@@ -2968,8 +2968,8 @@
         "net8.0": {
           "targetAlias": "net8.0",
           "projectReferences": {
-            "c:\\git\\mwworks\\backend\\src\\Api\\Api.csproj": {
-              "projectPath": "c:\\git\\mwworks\\backend\\src\\Api\\Api.csproj"
+            "C:\\git\\mwworks\\backend\\src\\Api\\Api.csproj": {
+              "projectPath": "C:\\git\\mwworks\\backend\\src\\Api\\Api.csproj"
             }
           }
         }

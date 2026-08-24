@@ -2,6 +2,9 @@ name: mwworks-app
 
 services:
   backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
     image: mwworks-backend:latest
     container_name: mwworks-backend
     environment:
@@ -13,6 +16,9 @@ services:
     restart: unless-stopped
 
   frontend:
+    build:
+      context: ../react-app
+      dockerfile: Dockerfile
     image: mwworks-frontend:latest
     container_name: mwworks-frontend
     depends_on:

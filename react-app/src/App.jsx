@@ -1,36 +1,36 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 const advantageItems = [
   {
-    image: '/api/images/individual-approach',
+    id: '2f477a7e-d8b1-4f8b-a2c1-c5e0f5d7aece',
     eyebrow: 'Работаем вместе с вами',
     title: 'Индивидуальный подход',
     description: 'Учитываем особенности участка, ваши задачи и пожелания — от первой идеи до готового изделия.',
     alt: 'Специалист обсуждает с заказчиком материалы и проект садовой мебели',
   },
   {
-    image: '/api/images/quality-control',
+    id: '4ef8b4d4-7ab9-4e5f-8f0d-1a8b9f87439f',
     eyebrow: 'Надёжность в деталях',
     title: 'Контроль качества',
     description: 'Проверяем геометрию, сварные соединения и финишную обработку на каждом этапе производства.',
     alt: 'Специалист проверяет качество металлического каркаса и деревянных деталей кресла',
   },
   {
-    image: '/api/images/product-design',
+    id: '30f9d4da-2d71-4e2c-b69b-44ebb5650d72',
     eyebrow: 'От идеи до чертежа',
     title: 'Проектирование',
     description: 'Разрабатываем конструкцию, подбираем материалы и заранее продумываем удобство будущего изделия.',
     alt: 'Промышленный дизайнер создаёт проект мебели в студии',
   },
   {
-    image: '/api/images/professional-equipment',
+    id: '11807b3c-41bb-41d1-9df3-a3ed29f1c7d0',
     eyebrow: 'Точность производства',
     title: 'Профессиональное оборудование',
     description: 'Используем современные станки и технологии для точной обработки металла и стабильного результата.',
     alt: 'Оператор работает на современном станке для лазерной резки металла',
   },
   {
-    image: '/api/images/mwworks-collection',
+    id: '7c86f95f-5e1a-49fb-8b2b-1cc31743ffb3',
     eyebrow: 'MWWorks',
     title: 'Создаём пространство для отдыха',
     description: 'Костровые чаши, мангалы, садовая мебель и качели в едином стиле — от проекта до готового изделия.',
@@ -67,24 +67,275 @@ const categories = [
   },
 ];
 
+const apiBase = '/api';
+
 function App() {
   const [activeSlide, setActiveSlide] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [adminToken, setAdminToken] = useState(() => localStorage.getItem('adminToken') ?? '');
+  const [adminError, setAdminError] = useState('');
+  const [adminMessage, setAdminMessage] = useState('');
+  const [categoriesState, setCategoriesState] = useState([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState('');
+  const [loginState, setLoginState] = useState({ username: '', password: '' });
+  const [categoryForm, setCategoryForm] = useState({ name: '', description: '', image: null });
+  const [productForm, setProductForm] = useState({ name: '', description: '', image: null });
+
+  const isAdminPage = window.location.pathname === '/admin';
+  const selectedCategory = useMemo(
+    () => categoriesState.find((category) => category.id === selectedCategoryId),
+    [categoriesState, selectedCategoryId]
+  );
 
   useEffect(() => {
     if (isPaused) return undefined;
-
     const timer = window.setInterval(() => {
       setActiveSlide((current) => (current + 1) % advantages.length);
     }, 3000);
-
     return () => window.clearInterval(timer);
   }, [isPaused]);
+
+  useEffect(() => {
+    if (!isAdminPage || !adminToken) return;
+    void fetchCategories();
+  }, [adminToken, isAdminPage]);
 
   const showSlide = (index) => {
     setActiveSlide((index + advantages.length) % advantages.length);
   };
+
+  const fetchCategories = async () => {
+    try {
+      const response = await fetch(`${apiBase}/categories`);
+      if (!response.ok) throw new Error('Не удалось загрузить категории');
+      setCategoriesState(await response.json());
+    } catch (error) {
+      setAdminError(error instanceof Error ? error.message : 'Ошибка загрузки категорий');
+    }
+  };
+
+  const handleLoginSubmit = async (event) => {
+    event.preventDefault();
+    setAdminError('');
+    setAdminMessage('');
+
+    const response = await fetch(`${apiBase}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(loginState),
+    });
+
+    if (!response.ok) {
+      setAdminError('Неверный логин или пароль');
+      return;
+    }
+
+    const { token } = await response.json();
+    setAdminToken(token);
+    localStorage.setItem('adminToken', token);
+    setAdminMessage('Вход выполнен. Загрузите категории или создайте новую.');
+    await fetchCategories();
+  };
+
+  const handleCategorySubmit = async (event) => {
+    event.preventDefault();
+    setAdminError('');
+    setAdminMessage('');
+
+    const formData = new FormData();
+    formData.append('name', categoryForm.name);
+    formData.append('description', categoryForm.description);
+    if (categoryForm.image) formData.append('image', categoryForm.image);
+
+    const response = await fetch(`${apiBase}/categories`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}` },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      setAdminError('Не удалось создать категорию');
+      return;
+    }
+
+    setCategoryForm({ name: '', description: '', image: null });
+    setAdminMessage('Категория создана.');
+    await fetchCategories();
+  };
+
+  const handleProductSubmit = async (event) => {
+    event.preventDefault();
+    if (!selectedCategoryId) return;
+    setAdminError('');
+    setAdminMessage('');
+
+    const formData = new FormData();
+    formData.append('name', productForm.name);
+    formData.append('description', productForm.description);
+    if (productForm.image) formData.append('image', productForm.image);
+
+    const response = await fetch(`${apiBase}/categories/${selectedCategoryId}/products`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}` },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      setAdminError('Не удалось добавить товар');
+      return;
+    }
+
+    setProductForm({ name: '', description: '', image: null });
+    setAdminMessage('Товар добавлен.');
+    await fetchCategories();
+  };
+
+  if (isAdminPage) {
+    return (
+      <main className="page-shell admin-shell">
+        <header className="site-header">
+          <a className="brand" href="/" aria-label="MWWorks — на главную">
+            <span className="brand__mark" aria-hidden="true"><i>M</i><i>W</i></span>
+            <span className="brand__name"><strong>MWWorks</strong><small>Admin</small></span>
+          </a>
+        </header>
+
+        <section className="admin-hero">
+          <h1>Панель администратора</h1>
+          <p>Войдите, чтобы создавать категории и добавлять товары в каталог.</p>
+        </section>
+
+        {!adminToken ? (
+          <form className="admin-form" onSubmit={handleLoginSubmit}>
+            <label>
+              <span>Имя пользователя</span>
+              <input
+                type="text"
+                value={loginState.username}
+                onChange={(event) => setLoginState((prev) => ({ ...prev, username: event.target.value }))}
+                required
+              />
+            </label>
+            <label>
+              <span>Пароль</span>
+              <input
+                type="password"
+                value={loginState.password}
+                onChange={(event) => setLoginState((prev) => ({ ...prev, password: event.target.value }))}
+                required
+              />
+            </label>
+            <button type="submit" className="admin-button">Войти</button>
+            {adminError && <p className="admin-error">{adminError}</p>}
+          </form>
+        ) : (
+          <div className="admin-grid">
+            <section className="admin-card">
+              <h2>Создать категорию</h2>
+              <form className="admin-form" onSubmit={handleCategorySubmit}>
+                <label>
+                  <span>Название категории</span>
+                  <input
+                    type="text"
+                    value={categoryForm.name}
+                    onChange={(event) => setCategoryForm((prev) => ({ ...prev, name: event.target.value }))}
+                    required
+                  />
+                </label>
+                <label>
+                  <span>Описание</span>
+                  <textarea
+                    rows="4"
+                    value={categoryForm.description}
+                    onChange={(event) => setCategoryForm((prev) => ({ ...prev, description: event.target.value }))}
+                    required
+                  />
+                </label>
+                <label>
+                  <span>Изображение</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) => setCategoryForm((prev) => ({ ...prev, image: event.target.files?.[0] ?? null }))}
+                    required
+                  />
+                </label>
+                <button type="submit" className="admin-button">Создать категорию</button>
+              </form>
+            </section>
+
+            <section className="admin-card">
+              <h2>Категории</h2>
+              <div className="admin-category-list">
+                {categoriesState.length === 0 && <p>Категории не найдены. Создайте первую.</p>}
+                {categoriesState.map((category) => (
+                  <button
+                    key={category.id}
+                    type="button"
+                    className={category.id === selectedCategoryId ? 'category-selected' : ''}
+                    onClick={() => setSelectedCategoryId(category.id)}
+                  >
+                    {category.name}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            {selectedCategory && (
+              <section className="admin-card admin-product-card">
+                <h2>Добавить товар в «{selectedCategory.name}»</h2>
+                <form className="admin-form" onSubmit={handleProductSubmit}>
+                  <label>
+                    <span>Название товара</span>
+                    <input
+                      type="text"
+                      value={productForm.name}
+                      onChange={(event) => setProductForm((prev) => ({ ...prev, name: event.target.value }))}
+                      required
+                    />
+                  </label>
+                  <label>
+                    <span>Описание</span>
+                    <textarea
+                      rows="4"
+                      value={productForm.description}
+                      onChange={(event) => setProductForm((prev) => ({ ...prev, description: event.target.value }))}
+                      required
+                    />
+                  </label>
+                  <label>
+                    <span>Изображение</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(event) => setProductForm((prev) => ({ ...prev, image: event.target.files?.[0] ?? null }))}
+                      required
+                    />
+                  </label>
+                  <button type="submit" className="admin-button">Добавить товар</button>
+                </form>
+
+                {selectedCategory.products?.length > 0 && (
+                  <div className="admin-product-list">
+                    <h3>Товары категории</h3>
+                    <ul>
+                      {selectedCategory.products.map((product) => (
+                        <li key={product.id}>{product.name}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </section>
+            )}
+          </div>
+        )}
+
+        {adminMessage && <p className="admin-message">{adminMessage}</p>}
+        {adminError && !adminToken && <p className="admin-error">{adminError}</p>}
+      </main>
+    );
+  }
 
   return (
     <main className="page-shell">
@@ -95,7 +346,7 @@ function App() {
         </a>
         <div className="site-header__actions">
           <a className="header-phone" href="tel:+78005552401">+7 (800) 555-24-01</a>
-          <a className="header-button" href="#order">Оставить заявку</a>
+          <a className="header-button" href="/admin">Админ</a>
         </div>
       </header>
 
@@ -116,7 +367,7 @@ function App() {
         {advantages.map((slide, index) => (
           <img
             className={`nature-banner__image${index === activeSlide ? ' nature-banner__image--active' : ''}`}
-            src={slide.image}
+            src={`${apiBase}/images/${slide.id}`}
             alt={index === activeSlide ? slide.alt : ''}
             loading={index === 0 ? 'eager' : 'lazy'}
             fetchPriority={index === 0 ? 'high' : 'low'}

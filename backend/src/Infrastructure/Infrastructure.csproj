@@ -20,6 +20,9 @@
     <EmbeddedResource Include="..\..\..\staticinfo\*.jpg">
       <LogicalName>Infrastructure.SeedImages.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="SeedImages\*.jpg">
+      <LogicalName>Infrastructure.SeedImages.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <PropertyGroup>

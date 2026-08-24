@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "c:\\git\\mwworks\\backend\\src\\Infrastructure\\Infrastructure.csproj": {}
+    "C:\\git\\mwworks\\backend\\src\\Infrastructure\\Infrastructure.csproj": {}
   },
   "projects": {
-    "c:\\git\\mwworks\\backend\\src\\Application\\Application.csproj": {
+    "C:\\git\\mwworks\\backend\\src\\Application\\Application.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "c:\\git\\mwworks\\backend\\src\\Application\\Application.csproj",
+        "projectUniqueName": "C:\\git\\mwworks\\backend\\src\\Application\\Application.csproj",
         "projectName": "Application",
-        "projectPath": "c:\\git\\mwworks\\backend\\src\\Application\\Application.csproj",
+        "projectPath": "C:\\git\\mwworks\\backend\\src\\Application\\Application.csproj",
         "packagesPath": "C:\\Users\\user\\.nuget\\packages\\",
-        "outputPath": "c:\\git\\mwworks\\backend\\src\\Application\\obj\\",
+        "outputPath": "C:\\git\\mwworks\\backend\\src\\Application\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\user\\AppData\\Roaming\\NuGet\\NuGet.Config"
@@ -62,14 +62,14 @@
         }
       }
     },
-    "c:\\git\\mwworks\\backend\\src\\Infrastructure\\Infrastructure.csproj": {
+    "C:\\git\\mwworks\\backend\\src\\Infrastructure\\Infrastructure.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "c:\\git\\mwworks\\backend\\src\\Infrastructure\\Infrastructure.csproj",
+        "projectUniqueName": "C:\\git\\mwworks\\backend\\src\\Infrastructure\\Infrastructure.csproj",
         "projectName": "Infrastructure",
-        "projectPath": "c:\\git\\mwworks\\backend\\src\\Infrastructure\\Infrastructure.csproj",
+        "projectPath": "C:\\git\\mwworks\\backend\\src\\Infrastructure\\Infrastructure.csproj",
         "packagesPath": "C:\\Users\\user\\.nuget\\packages\\",
-        "outputPath": "c:\\git\\mwworks\\backend\\src\\Infrastructure\\obj\\",
+        "outputPath": "C:\\git\\mwworks\\backend\\src\\Infrastructure\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\user\\AppData\\Roaming\\NuGet\\NuGet.Config"
@@ -84,8 +84,8 @@
           "net8.0": {
             "targetAlias": "net8.0",
             "projectReferences": {
-              "c:\\git\\mwworks\\backend\\src\\Application\\Application.csproj": {
-                "projectPath": "c:\\git\\mwworks\\backend\\src\\Application\\Application.csproj"
+              "C:\\git\\mwworks\\backend\\src\\Application\\Application.csproj": {
+                "projectPath": "C:\\git\\mwworks\\backend\\src\\Application\\Application.csproj"
               }
             }
           }
