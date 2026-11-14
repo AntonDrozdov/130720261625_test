@@ -21,6 +21,8 @@ public static class DependencyInjection
         services.AddScoped<IImageService, ImageService>();
         services.AddScoped<ICatalogRepository, CatalogRepository>();
         services.AddScoped<ICatalogService, CatalogService>();
+        services.AddScoped<IDesignProjectRepository, DesignProjectRepository>();
+        services.AddScoped<IDesignProjectService, DesignProjectService>();
         services.AddSingleton<IAdminTokenService, AdminTokenService>();
 
         return services;

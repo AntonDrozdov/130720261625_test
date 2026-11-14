@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import DesignEditor from './DesignEditor';
 
 const advantageItems = [
   {
@@ -78,16 +79,44 @@ function App() {
   const [adminMessage, setAdminMessage] = useState('');
   const [categoriesState, setCategoriesState] = useState([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
+  const [activeAdminSection, setActiveAdminSection] = useState('catalog');
+  const [editingCategoryId, setEditingCategoryId] = useState('');
+  const [editingProductId, setEditingProductId] = useState('');
+  const [isCatalogLoading, setIsCatalogLoading] = useState(false);
+  const [adminBusy, setAdminBusy] = useState(false);
   const [loginState, setLoginState] = useState({ username: '', password: '' });
   const [categoryForm, setCategoryForm] = useState({ name: '', description: '', image: null });
   const [productForm, setProductForm] = useState({ name: '', description: '', image: null });
+  const [designProjects, setDesignProjects] = useState([]);
+  const [activeDesignProject, setActiveDesignProject] = useState(null);
+  const [designName, setDesignName] = useState('');
+  const [designObjects, setDesignObjects] = useState([]);
+  const [selectedDesignObjectId, setSelectedDesignObjectId] = useState(null);
+  const [newDesignProjectName, setNewDesignProjectName] = useState('');
+  const [isDesignLoading, setIsDesignLoading] = useState(false);
+  const [isDesignSaving, setIsDesignSaving] = useState(false);
+  const [designError, setDesignError] = useState('');
+  const [designSaveStatus, setDesignSaveStatus] = useState('');
+  const [designDirty, setDesignDirty] = useState(false);
+  const designProjectRef = useRef(activeDesignProject);
+  const designNameRef = useRef(designName);
+  const designObjectsRef = useRef(designObjects);
+  const designDirtyRef = useRef(designDirty);
 
   const isAdminPage = window.location.pathname === '/admin';
   const selectedCategory = useMemo(
     () => categoriesState.find((category) => category.id === selectedCategoryId),
     [categoriesState, selectedCategoryId]
   );
+  const selectedDesignObject = useMemo(
+    () => designObjects.find((object) => object.id === selectedDesignObjectId),
+    [designObjects, selectedDesignObjectId]
+  );
 
+  designProjectRef.current = activeDesignProject;
+  designNameRef.current = designName;
+  designObjectsRef.current = designObjects;
+  designDirtyRef.current = designDirty;
   useEffect(() => {
     if (isPaused) return undefined;
     const timer = window.setInterval(() => {
@@ -106,13 +135,45 @@ function App() {
   };
 
   const fetchCategories = async () => {
+    setIsCatalogLoading(true);
     try {
       const response = await fetch(`${apiBase}/categories`);
-      if (!response.ok) throw new Error('Не удалось загрузить категории');
-      setCategoriesState(await response.json());
+      if (!response.ok) throw new Error('Не удалось загрузить каталог.');
+      const nextCategories = await response.json();
+      setCategoriesState(nextCategories);
+      setSelectedCategoryId((current) => nextCategories.some((category) => category.id === current)
+        ? current
+        : nextCategories[0]?.id ?? '');
     } catch (error) {
-      setAdminError(error instanceof Error ? error.message : 'Ошибка загрузки категорий');
+      setAdminError(error instanceof Error ? error.message : 'Ошибка загрузки каталога.');
+    } finally {
+      setIsCatalogLoading(false);
     }
+  };
+
+  const resetCategoryForm = () => {
+    setEditingCategoryId('');
+    setCategoryForm({ name: '', description: '', image: null });
+  };
+
+  const resetProductForm = () => {
+    setEditingProductId('');
+    setProductForm({ name: '', description: '', image: null });
+  };
+
+  const responseError = async (response, fallback) => {
+    const text = await response.text();
+    return text.trim() || fallback;
+  };
+
+  const logout = () => {
+    localStorage.removeItem('adminToken');
+    setAdminToken('');
+    setCategoriesState([]);
+    setSelectedCategoryId('');
+    resetCategoryForm();
+    resetProductForm();
+    setAdminMessage('Вы вышли из панели администратора.');
   };
 
   const handleLoginSubmit = async (event) => {
@@ -120,22 +181,26 @@ function App() {
     setAdminError('');
     setAdminMessage('');
 
-    const response = await fetch(`${apiBase}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(loginState),
-    });
+    setAdminBusy(true);
+    try {
+      const response = await fetch(`${apiBase}/auth/login`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(loginState),
+      });
+      if (!response.ok) {
+        setAdminError('Неверный логин или пароль.');
+        return;
+      }
 
-    if (!response.ok) {
-      setAdminError('Неверный логин или пароль');
-      return;
+      const { token } = await response.json();
+      setAdminToken(token);
+      localStorage.setItem('adminToken', token);
+      setAdminMessage('Вход выполнен. Каталог готов к редактированию.');
+      await fetchCategories();
+    } catch {
+      setAdminError('Не удалось выполнить вход. Проверьте подключение к серверу.');
+    } finally {
+      setAdminBusy(false);
     }
-
-    const { token } = await response.json();
-    setAdminToken(token);
-    localStorage.setItem('adminToken', token);
-    setAdminMessage('Вход выполнен. Загрузите категории или создайте новую.');
-    await fetchCategories();
   };
 
   const handleCategorySubmit = async (event) => {
@@ -148,20 +213,29 @@ function App() {
     formData.append('description', categoryForm.description);
     if (categoryForm.image) formData.append('image', categoryForm.image);
 
-    const response = await fetch(`${apiBase}/categories`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${adminToken}` },
-      body: formData,
-    });
+    const isEditing = Boolean(editingCategoryId);
+    setAdminBusy(true);
+    try {
+      const response = await fetch(`${apiBase}/categories${isEditing ? `/${editingCategoryId}` : ''}`, {
+        method: isEditing ? 'PUT' : 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+        body: formData,
+      });
+      if (!response.ok) {
+        setAdminError(await responseError(response, 'Не удалось сохранить категорию.'));
+        return;
+      }
 
-    if (!response.ok) {
-      setAdminError('Не удалось создать категорию');
-      return;
+      const saved = await response.json();
+      resetCategoryForm();
+      setSelectedCategoryId(saved.id);
+      setAdminMessage(isEditing ? 'Категория обновлена.' : 'Категория создана.');
+      await fetchCategories();
+    } catch {
+      setAdminError('Не удалось сохранить категорию. Проверьте подключение к серверу.');
+    } finally {
+      setAdminBusy(false);
     }
-
-    setCategoryForm({ name: '', description: '', image: null });
-    setAdminMessage('Категория создана.');
-    await fetchCategories();
   };
 
   const handleProductSubmit = async (event) => {
@@ -175,21 +249,190 @@ function App() {
     formData.append('description', productForm.description);
     if (productForm.image) formData.append('image', productForm.image);
 
-    const response = await fetch(`${apiBase}/categories/${selectedCategoryId}/products`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${adminToken}` },
-      body: formData,
-    });
+    const isEditing = Boolean(editingProductId);
+    setAdminBusy(true);
+    try {
+      const response = await fetch(`${apiBase}${isEditing ? `/categories/products/${editingProductId}` : `/categories/${selectedCategoryId}/products`}`, {
+        method: isEditing ? 'PUT' : 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+        body: formData,
+      });
+      if (!response.ok) {
+        setAdminError(await responseError(response, 'Не удалось сохранить товар.'));
+        return;
+      }
 
-    if (!response.ok) {
-      setAdminError('Не удалось добавить товар');
-      return;
+      resetProductForm();
+      setAdminMessage(isEditing ? 'Товар обновлён.' : 'Товар добавлен.');
+      await fetchCategories();
+    } catch {
+      setAdminError('Не удалось сохранить товар. Проверьте подключение к серверу.');
+    } finally {
+      setAdminBusy(false);
     }
-
-    setProductForm({ name: '', description: '', image: null });
-    setAdminMessage('Товар добавлен.');
-    await fetchCategories();
   };
+
+  const startCategoryEdit = (category) => {
+    setSelectedCategoryId(category.id);
+    setEditingCategoryId(category.id);
+    setCategoryForm({ name: category.name, description: category.description, image: null });
+    setAdminError('');
+  };
+
+  const startProductEdit = (product) => {
+    setEditingProductId(product.id);
+    setProductForm({ name: product.name, description: product.description, image: null });
+    setAdminError('');
+  };
+
+  const deleteCatalogItem = async (kind, id, name) => {
+    if (!window.confirm(`Удалить «${name}»? Это действие нельзя отменить.`)) return;
+    setAdminError('');
+    setAdminMessage('');
+    setAdminBusy(true);
+    try {
+      const path = kind === 'category' ? `/categories/${id}` : `/categories/products/${id}`;
+      const response = await fetch(`${apiBase}${path}`, { method: 'DELETE', headers: { Authorization: `Bearer ${adminToken}` } });
+      if (!response.ok) {
+        setAdminError(await responseError(response, 'Не удалось удалить запись.'));
+        return;
+      }
+      if (kind === 'category' && selectedCategoryId === id) setSelectedCategoryId('');
+      if (kind === 'category' && editingCategoryId === id) resetCategoryForm();
+      if (kind === 'product' && editingProductId === id) resetProductForm();
+      setAdminMessage(kind === 'category' ? 'Категория удалена.' : 'Товар удалён.');
+      await fetchCategories();
+    } catch {
+      setAdminError('Не удалось удалить запись. Проверьте подключение к серверу.');
+    } finally {
+      setAdminBusy(false);
+    }
+  };
+
+  const fetchDesignProjects = async () => {
+    setIsDesignLoading(true);
+    setDesignError('');
+    try {
+      const response = await fetch(`${apiBase}/design-projects`, { headers: { Authorization: `Bearer ${adminToken}` } });
+      if (!response.ok) throw new Error(await responseError(response, 'Не удалось загрузить проекты.'));
+      setDesignProjects(await response.json());
+    } catch (error) {
+      setDesignError(error instanceof Error ? error.message : 'Не удалось загрузить проекты.');
+    } finally {
+      setIsDesignLoading(false);
+    }
+  };
+
+  const openDesignProject = async (id) => {
+    setIsDesignLoading(true);
+    setDesignError('');
+    try {
+      const response = await fetch(`${apiBase}/design-projects/${id}`, { headers: { Authorization: `Bearer ${adminToken}` } });
+      if (!response.ok) throw new Error(await responseError(response, 'Не удалось открыть проект.'));
+      const project = await response.json();
+      let scene = { objects: [] };
+      try { scene = JSON.parse(project.sceneJson); } catch { /* The server accepts only valid JSON; retain a safe empty scene. */ }
+      setActiveDesignProject(project);
+      setDesignName(project.name);
+      setDesignObjects(Array.isArray(scene.objects) ? scene.objects : []);
+      setSelectedDesignObjectId(null);
+      setDesignDirty(false);
+      setDesignSaveStatus('Проект открыт.');
+    } catch (error) {
+      setDesignError(error instanceof Error ? error.message : 'Не удалось открыть проект.');
+    } finally {
+      setIsDesignLoading(false);
+    }
+  };
+
+  const createDesignProject = async (event) => {
+    event.preventDefault();
+    const name = newDesignProjectName.trim();
+    if (!name) return;
+    setIsDesignSaving(true);
+    setDesignError('');
+    try {
+      const response = await fetch(`${apiBase}/design-projects`, {
+        method: 'POST', headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
+      });
+      if (!response.ok) throw new Error(await responseError(response, 'Не удалось создать проект.'));
+      const project = await response.json();
+      setDesignProjects((current) => [{ id: project.id, name: project.name, createdAt: project.createdAt, updatedAt: project.updatedAt }, ...current]);
+      setActiveDesignProject(project);
+      setDesignName(project.name);
+      setDesignObjects([]);
+      setSelectedDesignObjectId(null);
+      setNewDesignProjectName('');
+      setDesignDirty(false);
+      setDesignSaveStatus('Новый проект создан.');
+    } catch (error) {
+      setDesignError(error instanceof Error ? error.message : 'Не удалось создать проект.');
+    } finally {
+      setIsDesignSaving(false);
+    }
+  };
+
+  const saveDesignProject = async (automatic = false) => {
+    const project = designProjectRef.current;
+    if (!project || (automatic && !designDirtyRef.current)) return;
+    const name = designNameRef.current.trim() || project.name;
+    const sceneJson = JSON.stringify({ version: 1, objects: designObjectsRef.current });
+    setIsDesignSaving(true);
+    setDesignError('');
+    try {
+      const response = await fetch(`${apiBase}/design-projects/${project.id}`, {
+        method: 'PUT', headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ name, sceneJson }),
+      });
+      if (!response.ok) throw new Error(await responseError(response, 'Не удалось сохранить проект.'));
+      const saved = await response.json();
+      setActiveDesignProject(saved);
+      setDesignProjects((current) => current.map((item) => item.id === saved.id
+        ? { id: saved.id, name: saved.name, createdAt: saved.createdAt, updatedAt: saved.updatedAt } : item));
+      if (designProjectRef.current?.id === saved.id && designNameRef.current.trim() === name
+        && JSON.stringify({ version: 1, objects: designObjectsRef.current }) === sceneJson) setDesignDirty(false);
+      setDesignSaveStatus(`${automatic ? 'Автосохранение' : 'Сохранено'}: ${new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`);
+    } catch (error) {
+      setDesignError(error instanceof Error ? error.message : 'Не удалось сохранить проект.');
+    } finally {
+      setIsDesignSaving(false);
+    }
+  };
+
+  const updateDesignObject = (id, patch) => {
+    setDesignObjects((current) => current.map((object) => object.id === id ? { ...object, ...patch } : object));
+    setDesignDirty(true);
+  };
+
+  const deleteDesignObject = (id) => {
+    setDesignObjects((current) => current.filter((object) => object.id !== id));
+    setSelectedDesignObjectId((current) => current === id ? null : current);
+    setDesignDirty(true);
+  };
+
+  const addDesignObject = (type = 'box') => {
+    const id = window.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+    const index = designObjects.length;
+    const labels = { box: 'Параллелепипед', cube: 'Куб', sphere: 'Шар' };
+    const size = type === 'box' ? { length: 1000, width: 600, height: 500 } : { length: 600, width: 600, height: 600 };
+    setDesignObjects((current) => [...current, {
+      id, type, name: `${labels[type]} ${current.length + 1}`, color: '#f8f8f6', dimensions: size,
+      position: { x: (index % 3) * 1200, y: 0, z: Math.floor(index / 3) * 900 },
+      rotation: { x: 0, y: 0, z: 0 },
+    }]);
+    setSelectedDesignObjectId(id);
+    setDesignDirty(true);
+  };
+
+  useEffect(() => {
+    if (!isAdminPage || !adminToken || activeAdminSection !== 'design') return;
+    void fetchDesignProjects();
+  }, [adminToken, activeAdminSection, isAdminPage]);
+
+  useEffect(() => {
+    if (!activeDesignProject?.id) return undefined;
+    const timer = window.setInterval(() => { void saveDesignProject(true); }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [activeDesignProject?.id]);
 
   if (isAdminPage) {
     return (
@@ -199,40 +442,32 @@ function App() {
             <span className="brand__mark" aria-hidden="true"><i>M</i><i>W</i></span>
             <span className="brand__name"><strong>MWWorks</strong><small>Admin</small></span>
           </a>
+          <div className="admin-header-actions">
+            <a className="admin-link-button" href="/">К сайту</a>
+            {adminToken && <button type="button" className="admin-link-button" onClick={logout}>Выйти</button>}
+          </div>
         </header>
 
-        <section className="admin-hero">
-          <h1>Панель администратора</h1>
-          <p>Войдите, чтобы создавать категории и добавлять товары в каталог.</p>
-        </section>
-
         {!adminToken ? (
-          <form className="admin-form" onSubmit={handleLoginSubmit}>
-            <label>
-              <span>Имя пользователя</span>
-              <input
-                type="text"
-                value={loginState.username}
-                onChange={(event) => setLoginState((prev) => ({ ...prev, username: event.target.value }))}
-                required
-              />
-            </label>
-            <label>
-              <span>Пароль</span>
-              <input
-                type="password"
-                value={loginState.password}
-                onChange={(event) => setLoginState((prev) => ({ ...prev, password: event.target.value }))}
-                required
-              />
-            </label>
-            <button type="submit" className="admin-button">Войти</button>
-            {adminError && <p className="admin-error">{adminError}</p>}
-          </form>
+          <section className="admin-card admin-login-card"><form className="admin-form" onSubmit={handleLoginSubmit}>
+              <label><span>Имя пользователя</span><input type="text" autoComplete="username" value={loginState.username} onChange={(event) => setLoginState((prev) => ({ ...prev, username: event.target.value }))} required /></label>
+              <label><span>Пароль</span><input type="password" autoComplete="current-password" value={loginState.password} onChange={(event) => setLoginState((prev) => ({ ...prev, password: event.target.value }))} required /></label>
+              <button type="submit" className="admin-button" disabled={adminBusy}>{adminBusy ? 'Проверяем…' : 'Войти'}</button>
+              {adminError && <p className="admin-error">{adminError}</p>}
+            </form></section>
         ) : (
-          <div className="admin-grid">
+          <div className="admin-workspace">
+            <aside className="admin-sidebar">
+              <nav className="admin-menu" aria-label="Разделы админ-панели">
+                <button type="button" className={activeAdminSection === 'catalog' ? 'is-active' : ''} onClick={() => setActiveAdminSection('catalog')}>Ассортимент</button>
+                <button type="button" className={activeAdminSection === 'design' ? 'is-active' : ''} onClick={() => setActiveAdminSection('design')}>Проектирование</button>
+              </nav>
+            </aside>
+            <div className="admin-content">
+              {activeAdminSection === 'catalog' && (
+                <div className="admin-grid">
             <section className="admin-card">
-              <h2>Создать категорию</h2>
+              <div className="admin-card-heading"><h2>{editingCategoryId ? 'Редактировать категорию' : 'Новая категория'}</h2>{editingCategoryId && <button type="button" className="admin-text-button" onClick={resetCategoryForm}>Отмена</button>}</div>
               <form className="admin-form" onSubmit={handleCategorySubmit}>
                 <label>
                   <span>Название категории</span>
@@ -258,81 +493,95 @@ function App() {
                     type="file"
                     accept="image/*"
                     onChange={(event) => setCategoryForm((prev) => ({ ...prev, image: event.target.files?.[0] ?? null }))}
-                    required
+                    required={!editingCategoryId}
                   />
+                  {editingCategoryId && <small>Оставьте поле пустым, чтобы сохранить текущее изображение.</small>}
                 </label>
-                <button type="submit" className="admin-button">Создать категорию</button>
+                <button type="submit" className="admin-button" disabled={adminBusy}>{adminBusy ? 'Сохраняем…' : editingCategoryId ? 'Сохранить категорию' : 'Создать категорию'}</button>
               </form>
             </section>
 
             <section className="admin-card">
-              <h2>Категории</h2>
+              <div className="admin-card-heading"><h2>Категории</h2><button type="button" className="admin-text-button" onClick={() => void fetchCategories()} disabled={isCatalogLoading || adminBusy}>Обновить</button></div>
               <div className="admin-category-list">
-                {categoriesState.length === 0 && <p>Категории не найдены. Создайте первую.</p>}
+                {isCatalogLoading && <p className="admin-empty">Загружаем каталог…</p>}
+                {!isCatalogLoading && categoriesState.length === 0 && <p className="admin-empty">Категорий пока нет. Создайте первую.</p>}
                 {categoriesState.map((category) => (
-                  <button
-                    key={category.id}
-                    type="button"
-                    className={category.id === selectedCategoryId ? 'category-selected' : ''}
-                    onClick={() => setSelectedCategoryId(category.id)}
-                  >
-                    {category.name}
-                  </button>
+                  <article key={category.id} className={`admin-category-item${category.id === selectedCategoryId ? ' category-selected' : ''}`}>
+                    <button type="button" className="admin-category-select" onClick={() => { setSelectedCategoryId(category.id); resetCategoryForm(); resetProductForm(); }}>
+                      <img src={category.imageUrl} alt="" /><span><strong>{category.name}</strong><small>{category.products?.length ?? 0} товаров</small></span>
+                    </button>
+                    <div className="admin-row-actions"><button type="button" className="admin-icon-button" title="Редактировать категорию" onClick={() => startCategoryEdit(category)}>✎</button><button type="button" className="admin-icon-button danger" title="Удалить категорию" onClick={() => void deleteCatalogItem('category', category.id, category.name)}>×</button></div>
+                  </article>
                 ))}
               </div>
             </section>
 
             {selectedCategory && (
               <section className="admin-card admin-product-card">
-                <h2>Добавить товар в «{selectedCategory.name}»</h2>
-                <form className="admin-form" onSubmit={handleProductSubmit}>
-                  <label>
-                    <span>Название товара</span>
-                    <input
-                      type="text"
-                      value={productForm.name}
-                      onChange={(event) => setProductForm((prev) => ({ ...prev, name: event.target.value }))}
-                      required
-                    />
-                  </label>
-                  <label>
-                    <span>Описание</span>
-                    <textarea
-                      rows="4"
-                      value={productForm.description}
-                      onChange={(event) => setProductForm((prev) => ({ ...prev, description: event.target.value }))}
-                      required
-                    />
-                  </label>
-                  <label>
-                    <span>Изображение</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(event) => setProductForm((prev) => ({ ...prev, image: event.target.files?.[0] ?? null }))}
-                      required
-                    />
-                  </label>
-                  <button type="submit" className="admin-button">Добавить товар</button>
-                </form>
-
-                {selectedCategory.products?.length > 0 && (
+                <div className="admin-card-heading"><h2>{editingProductId ? `Редактировать товар: ${productForm.name}` : `Товары: «${selectedCategory.name}»`}</h2>{editingProductId && <button type="button" className="admin-text-button" onClick={resetProductForm}>Отмена</button>}</div>
+                <div className="admin-product-layout">
+                  <form className="admin-form" onSubmit={handleProductSubmit}>
+                    <label><span>Название товара</span><input type="text" value={productForm.name} onChange={(event) => setProductForm((prev) => ({ ...prev, name: event.target.value }))} required /></label>
+                    <label><span>Описание</span><textarea rows="4" value={productForm.description} onChange={(event) => setProductForm((prev) => ({ ...prev, description: event.target.value }))} required /></label>
+                    <label><span>Изображение</span><input type="file" accept="image/*" onChange={(event) => setProductForm((prev) => ({ ...prev, image: event.target.files?.[0] ?? null }))} required={!editingProductId} />{editingProductId && <small>Новое изображение необязательно.</small>}</label>
+                    <button type="submit" className="admin-button" disabled={adminBusy}>{adminBusy ? 'Сохраняем…' : editingProductId ? 'Сохранить товар' : 'Добавить товар'}</button>
+                  </form>
                   <div className="admin-product-list">
-                    <h3>Товары категории</h3>
-                    <ul>
-                      {selectedCategory.products.map((product) => (
-                        <li key={product.id}>{product.name}</li>
-                      ))}
-                    </ul>
+                    {selectedCategory.products?.length > 0 ? selectedCategory.products.map((product) => <article className="admin-product-item" key={product.id}>
+                      <img src={product.imageUrl} alt="" /><div><strong>{product.name}</strong><p>{product.description}</p></div><div className="admin-row-actions"><button type="button" className="admin-icon-button" title="Редактировать товар" onClick={() => startProductEdit(product)}>✎</button><button type="button" className="admin-icon-button danger" title="Удалить товар" onClick={() => void deleteCatalogItem('product', product.id, product.name)}>×</button></div>
+                    </article>) : <p className="admin-empty">В этой категории пока нет товаров.</p>}
                   </div>
-                )}
+                </div>
               </section>
             )}
+                </div>
+              )}
+              {activeAdminSection === 'design' && (!activeDesignProject ? <section className="admin-card design-project-picker">
+                <div className="admin-card-heading"><h2>Проекты</h2><button type="button" className="admin-text-button" onClick={() => void fetchDesignProjects()} disabled={isDesignLoading}>Обновить</button></div>
+                <form className="design-new-project" onSubmit={createDesignProject}>
+                  <input type="text" value={newDesignProjectName} onChange={(event) => setNewDesignProjectName(event.target.value)} placeholder="Название нового проекта" maxLength="200" required />
+                  <button type="submit" className="admin-button" disabled={isDesignSaving}>{isDesignSaving ? 'Создаём…' : 'Создать проект'}</button>
+                </form>
+                {designError && <p className="admin-error">{designError}</p>}
+                {isDesignLoading ? <p className="admin-empty">Загружаем проекты…</p> : <div className="design-project-list">
+                  {designProjects.length === 0 ? <p className="admin-empty">Проектов пока нет. Создайте первый эскиз.</p> : designProjects.map((project) => <button type="button" key={project.id} onClick={() => void openDesignProject(project.id)}>
+                    <strong>{project.name}</strong><small>Изменён {new Date(project.updatedAt).toLocaleString('ru-RU')}</small>
+                  </button>)}
+                </div>}
+              </section> : <section className="design-project-editor">
+                <div className="design-project-header">
+                  <button type="button" className="admin-text-button" onClick={() => { setActiveDesignProject(null); setSelectedDesignObjectId(null); }}>← К проектам</button>
+                  <input className="design-project-name" type="text" value={designName} maxLength="200" onChange={(event) => { setDesignName(event.target.value); setDesignDirty(true); }} aria-label="Название проекта" />
+                  <span className={`design-save-status${designDirty ? ' is-dirty' : ''}`}>{isDesignSaving ? 'Сохраняем…' : designDirty ? 'Есть несохранённые изменения' : designSaveStatus}</span>
+                  <button type="button" className="admin-button" onClick={() => void saveDesignProject()} disabled={isDesignSaving}>{isDesignSaving ? 'Сохраняем…' : 'Сохранить'}</button>
+                </div>
+                {designError && <p className="admin-error">{designError}</p>}
+                <div className="design-workspace">
+                  <DesignEditor objects={designObjects} selectedId={selectedDesignObjectId} onSelect={setSelectedDesignObjectId} onChange={updateDesignObject} onDelete={deleteDesignObject} onAddObject={addDesignObject} />
+                  <aside className="design-properties">
+                    {selectedDesignObject ? <>
+                      <h2>Свойства объекта</h2>
+                      <label><span>Название</span><input type="text" value={selectedDesignObject.name} onChange={(event) => updateDesignObject(selectedDesignObject.id, { name: event.target.value })} /></label>
+                      <label><span>Цвет</span><input type="color" value={selectedDesignObject.color || '#8b6b4d'} onChange={(event) => updateDesignObject(selectedDesignObject.id, { color: event.target.value })} /></label>
+                      <fieldset><legend>Размеры, мм</legend>
+                        <label><span>Длина</span><input type="number" min="10" step="1" value={selectedDesignObject.dimensions?.length ?? 1000} onChange={(event) => updateDesignObject(selectedDesignObject.id, { dimensions: { ...selectedDesignObject.dimensions, length: Math.max(10, Number(event.target.value)) } })} /></label>
+                        <label><span>Ширина</span><input type="number" min="10" step="1" value={selectedDesignObject.dimensions?.width ?? 600} onChange={(event) => updateDesignObject(selectedDesignObject.id, { dimensions: { ...selectedDesignObject.dimensions, width: Math.max(10, Number(event.target.value)) } })} /></label>
+                        <label><span>Высота</span><input type="number" min="10" step="1" value={selectedDesignObject.dimensions?.height ?? 500} onChange={(event) => updateDesignObject(selectedDesignObject.id, { dimensions: { ...selectedDesignObject.dimensions, height: Math.max(10, Number(event.target.value)) } })} /></label>
+                      </fieldset>
+                      <fieldset><legend>Поворот, °</legend>
+                        {['x', 'y', 'z'].map((axis) => <label key={axis}><span>{axis.toUpperCase()}</span><input type="number" step="1" value={selectedDesignObject.rotation?.[axis] ?? 0} onChange={(event) => updateDesignObject(selectedDesignObject.id, { rotation: { ...selectedDesignObject.rotation, [axis]: Number(event.target.value) } })} /></label>)}
+                      </fieldset>
+                    </> : <p className="admin-empty">Выберите объект на сцене, чтобы изменить его свойства.</p>}
+                  </aside>
+                </div>
+              </section>)}
+            </div>
           </div>
         )}
 
         {adminMessage && <p className="admin-message">{adminMessage}</p>}
-        {adminError && !adminToken && <p className="admin-error">{adminError}</p>}
+        {adminError && adminToken && <p className="admin-error">{adminError}</p>}
       </main>
     );
   }

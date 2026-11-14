@@ -9,6 +9,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<ImageEntity> Images => Set<ImageEntity>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Product> Products => Set<Product>();
+    public DbSet<DesignProject> DesignProjects => Set<DesignProject>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
