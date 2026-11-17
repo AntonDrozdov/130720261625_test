@@ -1,3 +1,4 @@
 @echo off
-docker save mwworks-backend:latest | ssh root@45.12.238.40 docker load
+call "%~dp0transfer-images.cmd" -Service backend %*
+exit /b %errorlevel%
 

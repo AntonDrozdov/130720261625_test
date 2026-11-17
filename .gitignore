@@ -5,3 +5,5 @@ backend/*.log
 react-app/node_modules/
 react-app/dist/
 react-app/*.log
+screenshots/*.png
+backend/src/WebApi/screenshots/

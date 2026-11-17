@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import DesignEditor from './DesignEditor';
+import { createDesignHistory } from './designHistory';
+import CommittedNumberInput from './components/CommittedNumberInput';
+import { planeDistances, positionAtPlaneDistance } from './designDistances';
+import { createFirepitFurniture } from './firepitFurniture';
+import { createWorkshopFrame } from './workshopFrame';
+import { createPool } from './pool';
 
 const advantageItems = [
   {
@@ -70,6 +76,12 @@ const categories = [
 
 const apiBase = '/api';
 
+function CatalogModal({ children, busy, onClose, label = 'Форма каталога' }) {
+  const ref = useRef(null);
+  useEffect(() => { ref.current.showModal(); }, []);
+  return <dialog ref={ref} className="admin-catalog-modal" aria-label={label} onCancel={(event) => { event.preventDefault(); if (!busy) onClose(); }}>{children}</dialog>;
+}
+
 function App() {
   const [activeSlide, setActiveSlide] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
@@ -80,6 +92,7 @@ function App() {
   const [categoriesState, setCategoriesState] = useState([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [activeAdminSection, setActiveAdminSection] = useState('catalog');
+  const [catalogModal, setCatalogModal] = useState(null);
   const [editingCategoryId, setEditingCategoryId] = useState('');
   const [editingProductId, setEditingProductId] = useState('');
   const [isCatalogLoading, setIsCatalogLoading] = useState(false);
@@ -90,9 +103,43 @@ function App() {
   const [designProjects, setDesignProjects] = useState([]);
   const [activeDesignProject, setActiveDesignProject] = useState(null);
   const [designName, setDesignName] = useState('');
-  const [designObjects, setDesignObjects] = useState([]);
-  const [selectedDesignObjectId, setSelectedDesignObjectId] = useState(null);
+  const [designObjects, renderDesignObjects] = useState([]);
+  const historyRef = useRef(null);
+  if (!historyRef.current) historyRef.current = createDesignHistory();
+  const [undoCount, setUndoCount] = useState(0);
+  const [isDesignInteracting, setIsDesignInteracting] = useState(false);
+  const setDesignObjects = (update) => {
+    renderDesignObjects(historyRef.current.change(update));
+    setUndoCount(historyRef.current.count);
+  };
+  const resetDesignObjects = (objects) => {
+    historyRef.current.reset(objects);
+    renderDesignObjects(objects);
+    setUndoCount(0);
+    setIsDesignInteracting(false);
+  };
+  const undoDesign = () => {
+    const objects = historyRef.current.undo();
+    if (!objects) return;
+    renderDesignObjects(objects);
+    designObjectsRef.current = objects;
+    setUndoCount(historyRef.current.count);
+    setSelectedDesignObjectIds((ids) => ids.filter((id) => objects.some((object) => object.id === id)));
+    setDesignDirty(true);
+  };
+  const beginDesignAction = () => { historyRef.current.begin(); setIsDesignInteracting(true); };
+  const endDesignAction = () => { historyRef.current.end(); setIsDesignInteracting(false); };
+  const [selectedDesignObjectIds, setSelectedDesignObjectIds] = useState([]);
+  const selectedDesignObjectId = selectedDesignObjectIds.at(-1) ?? null;
+  const setSelectedDesignObjectId = (next, additive = false) => setSelectedDesignObjectIds((current) => {
+    const id = typeof next === 'function' ? next(current.at(-1) ?? null) : next;
+    if (!id) return [];
+    if (!additive) return [id];
+    return current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
+  });
   const [newDesignProjectName, setNewDesignProjectName] = useState('');
+  const [isDesignCreateOpen, setIsDesignCreateOpen] = useState(false);
+  const [editingDesignProjectId, setEditingDesignProjectId] = useState('');
   const [isDesignLoading, setIsDesignLoading] = useState(false);
   const [isDesignSaving, setIsDesignSaving] = useState(false);
   const [designError, setDesignError] = useState('');
@@ -143,7 +190,7 @@ function App() {
       setCategoriesState(nextCategories);
       setSelectedCategoryId((current) => nextCategories.some((category) => category.id === current)
         ? current
-        : nextCategories[0]?.id ?? '');
+        : '');
     } catch (error) {
       setAdminError(error instanceof Error ? error.message : 'Ошибка загрузки каталога.');
     } finally {
@@ -161,6 +208,13 @@ function App() {
     setProductForm({ name: '', description: '', image: null });
   };
 
+  const closeCatalogModal = () => {
+    setCatalogModal(null);
+    resetCategoryForm();
+    resetProductForm();
+    setAdminError('');
+  };
+
   const responseError = async (response, fallback) => {
     const text = await response.text();
     return text.trim() || fallback;
@@ -169,7 +223,9 @@ function App() {
   const logout = () => {
     localStorage.removeItem('adminToken');
     setAdminToken('');
+    setCatalogModal(null);
     setCategoriesState([]);
+    setIsDesignCreateOpen(false);
     setSelectedCategoryId('');
     resetCategoryForm();
     resetProductForm();
@@ -226,9 +282,9 @@ function App() {
         return;
       }
 
-      const saved = await response.json();
+      await response.json();
       resetCategoryForm();
-      setSelectedCategoryId(saved.id);
+      setCatalogModal(null);
       setAdminMessage(isEditing ? 'Категория обновлена.' : 'Категория создана.');
       await fetchCategories();
     } catch {
@@ -263,6 +319,7 @@ function App() {
       }
 
       resetProductForm();
+      setCatalogModal(null);
       setAdminMessage(isEditing ? 'Товар обновлён.' : 'Товар добавлен.');
       await fetchCategories();
     } catch {
@@ -273,13 +330,14 @@ function App() {
   };
 
   const startCategoryEdit = (category) => {
-    setSelectedCategoryId(category.id);
+    setCatalogModal('category');
     setEditingCategoryId(category.id);
     setCategoryForm({ name: category.name, description: category.description, image: null });
     setAdminError('');
   };
 
   const startProductEdit = (product) => {
+    setCatalogModal('product');
     setEditingProductId(product.id);
     setProductForm({ name: product.name, description: product.description, image: null });
     setAdminError('');
@@ -334,7 +392,7 @@ function App() {
       try { scene = JSON.parse(project.sceneJson); } catch { /* The server accepts only valid JSON; retain a safe empty scene. */ }
       setActiveDesignProject(project);
       setDesignName(project.name);
-      setDesignObjects(Array.isArray(scene.objects) ? scene.objects : []);
+      resetDesignObjects(Array.isArray(scene.objects) ? scene.objects : []);
       setSelectedDesignObjectId(null);
       setDesignDirty(false);
       setDesignSaveStatus('Проект открыт.');
@@ -352,21 +410,46 @@ function App() {
     setIsDesignSaving(true);
     setDesignError('');
     try {
-      const response = await fetch(`${apiBase}/design-projects`, {
-        method: 'POST', headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
+      const response = await fetch(`${apiBase}/design-projects${editingDesignProjectId ? `/${editingDesignProjectId}` : ''}`, {
+        method: editingDesignProjectId ? 'PATCH' : 'POST', headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
       });
-      if (!response.ok) throw new Error(await responseError(response, 'Не удалось создать проект.'));
+      if (!response.ok) throw new Error(await responseError(response, 'Не удалось сохранить проект.'));
       const project = await response.json();
+      if (editingDesignProjectId) {
+        setDesignProjects((current) => current.map((item) => item.id === project.id ? { ...item, name: project.name, updatedAt: project.updatedAt } : item));
+        setEditingDesignProjectId('');
+        setIsDesignCreateOpen(false);
+        setNewDesignProjectName('');
+        return;
+      }
       setDesignProjects((current) => [{ id: project.id, name: project.name, createdAt: project.createdAt, updatedAt: project.updatedAt }, ...current]);
       setActiveDesignProject(project);
       setDesignName(project.name);
-      setDesignObjects([]);
+      resetDesignObjects([]);
       setSelectedDesignObjectId(null);
       setNewDesignProjectName('');
+      setIsDesignCreateOpen(false);
       setDesignDirty(false);
       setDesignSaveStatus('Новый проект создан.');
     } catch (error) {
       setDesignError(error instanceof Error ? error.message : 'Не удалось создать проект.');
+    } finally {
+      setIsDesignSaving(false);
+    }
+  };
+
+  const deleteDesignProject = async (project) => {
+    if (!window.confirm(`Удалить проект «${project.name}»? Это действие нельзя отменить.`)) return;
+    setIsDesignSaving(true);
+    setDesignError('');
+    try {
+      const response = await fetch(`${apiBase}/design-projects/${project.id}`, {
+        method: 'DELETE', headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      if (!response.ok) throw new Error(await responseError(response, 'Не удалось удалить проект.'));
+      setDesignProjects((current) => current.filter((item) => item.id !== project.id));
+    } catch (error) {
+      setDesignError(error instanceof Error ? error.message : 'Не удалось удалить проект.');
     } finally {
       setIsDesignSaving(false);
     }
@@ -403,9 +486,16 @@ function App() {
     setDesignDirty(true);
   };
 
-  const deleteDesignObject = (id) => {
-    setDesignObjects((current) => current.filter((object) => object.id !== id));
-    setSelectedDesignObjectId((current) => current === id ? null : current);
+  const updateDesignObjects = (changes) => {
+    const patches = new Map(changes.map(({ id, ...patch }) => [id, patch]));
+    setDesignObjects((current) => current.map((object) => patches.has(object.id) ? { ...object, ...patches.get(object.id) } : object));
+    setDesignDirty(true);
+  };
+
+  const deleteDesignObject = (selection) => {
+    const ids = new Set(Array.isArray(selection) ? selection : [selection]);
+    setDesignObjects((current) => current.filter((object) => !ids.has(object.id)));
+    setSelectedDesignObjectIds((current) => current.filter((id) => !ids.has(id)));
     setDesignDirty(true);
   };
 
@@ -421,6 +511,74 @@ function App() {
     }]);
     setSelectedDesignObjectId(id);
     setDesignDirty(true);
+  };
+
+  const pasteDesignObject = (source, offset) => {
+    const id = window.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+    const copy = structuredClone(source);
+    copy.id = id;
+    copy.name = `${source.name} — копия`;
+    copy.position = { x: (source.position?.x ?? 0) + offset, y: source.position?.y ?? 0, z: (source.position?.z ?? 0) + offset };
+    setDesignObjects((current) => [...current, copy]);
+    setSelectedDesignObjectId(id);
+    setDesignDirty(true);
+  };
+
+  const addCoffeeTable = () => {
+    const makePart = (name, dimensions, position, color) => ({
+      id: window.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`,
+      type: 'box', name, dimensions, position, color, rotation: { x: 0, y: 0, z: 0 },
+    });
+    // Start beyond existing objects so repeated tables do not overlap.
+    const offsetX = designObjects.length ? Math.max(0, ...designObjects.map((object) => (object.position?.x ?? 0) + planeDistances(object)[0].extent)) + 200 : 0;
+    const parts = [
+      makePart('Стол — столешница', { length: 1000, width: 500, height: 40 }, { x: offsetX + 500, y: 460, z: 250 }, '#b78a5b'),
+      ...[[75, 75], [925, 75], [75, 425], [925, 425]].map(([x, z], index) =>
+        makePart(`Стол — ножка ${index + 1}`, { length: 50, width: 50, height: 460 }, { x: offsetX + x, y: 0, z }, '#414640')),
+    ];
+    setDesignObjects((current) => [...current, ...parts]);
+    setSelectedDesignObjectIds(parts.map((part) => part.id));
+    setDesignDirty(true);
+  };
+
+  const addFirepitFurniture = () => {
+    const offsetX = designObjects.length ? Math.max(0, ...designObjects.map((object) => (object.position?.x ?? 0) + planeDistances(object)[0].extent)) + 200 : 0;
+    const parts = createFirepitFurniture(offsetX);
+    setDesignObjects((current) => [...current, ...parts]);
+    setSelectedDesignObjectIds(parts.map((part) => part.id));
+    setDesignDirty(true);
+  };
+
+  const addPool = () => {
+    const offsetX = designObjects.length ? Math.max(0, ...designObjects.map((object) => (object.position?.x ?? 0) + planeDistances(object)[0].extent)) + 500 : 0;
+    const parts = createPool(offsetX);
+    setDesignObjects((current) => [...current, ...parts]);
+    setSelectedDesignObjectIds(parts.map((part) => part.id));
+    setDesignDirty(true);
+  };
+
+  const addWorkshopFrame = () => {
+    const offsetX = designObjects.length ? Math.max(0, ...designObjects.map((object) => (object.position?.x ?? 0) + planeDistances(object)[0].extent)) + 500 : 0;
+    const parts = createWorkshopFrame(offsetX);
+    setDesignObjects((current) => [...current, ...parts]);
+    setSelectedDesignObjectIds(parts.map((part) => part.id));
+    setDesignDirty(true);
+    setDesignSaveStatus('Каркас — эскиз. Сечения требуют расчёта под нагрузки участка.');
+  };
+
+  const saveSceneScreenshot = async (blob) => {
+    const form = new FormData();
+    form.append('image', blob, 'scene.png');
+    const response = await fetch(`${apiBase}/design-projects/${activeDesignProject.id}/screenshots`, {
+      method: 'POST', headers: { Authorization: `Bearer ${adminToken}` }, body: form,
+    });
+    if (!response.ok) {
+      if (response.status === 404) throw new Error('Обработчик снимков или проект не найден. Обновите бэкенд и откройте проект заново.');
+      if (response.status === 401 || response.status === 403) throw new Error('Сессия истекла. Войдите в админ-панель заново.');
+      if (response.status === 413) throw new Error('Размер снимка превышает допустимый размер загрузки на сервере.');
+      throw new Error(await responseError(response, `Не удалось сохранить снимок (HTTP ${response.status}).`));
+    }
+    return response.json();
   };
 
   useEffect(() => {
@@ -459,19 +617,42 @@ function App() {
           <div className="admin-workspace">
             <aside className="admin-sidebar">
               <nav className="admin-menu" aria-label="Разделы админ-панели">
-                <button type="button" className={activeAdminSection === 'catalog' ? 'is-active' : ''} onClick={() => setActiveAdminSection('catalog')}>Ассортимент</button>
+                <button type="button" className={activeAdminSection === 'catalog' ? 'is-active' : ''} onClick={() => { setActiveAdminSection('catalog'); setSelectedCategoryId(''); }}>Ассортимент</button>
                 <button type="button" className={activeAdminSection === 'design' ? 'is-active' : ''} onClick={() => setActiveAdminSection('design')}>Проектирование</button>
               </nav>
             </aside>
             <div className="admin-content">
               {activeAdminSection === 'catalog' && (
-                <div className="admin-grid">
-            <section className="admin-card">
-              <div className="admin-card-heading"><h2>{editingCategoryId ? 'Редактировать категорию' : 'Новая категория'}</h2>{editingCategoryId && <button type="button" className="admin-text-button" onClick={resetCategoryForm}>Отмена</button>}</div>
-              <form className="admin-form" onSubmit={handleCategorySubmit}>
+                <section className="admin-card admin-catalog">
+                  {selectedCategory && <button type="button" className="admin-text-button admin-catalog-back" onClick={() => { setSelectedCategoryId(''); setAdminError(''); }}>← К категориям</button>}
+                  <div className="admin-card-heading admin-catalog-heading">
+                    <h2>{selectedCategory ? selectedCategory.name : 'Категории'}</h2>
+                    <button type="button" className="admin-button" disabled={adminBusy || isCatalogLoading} onClick={() => { resetCategoryForm(); resetProductForm(); setAdminError(''); setAdminMessage(''); setCatalogModal(selectedCategory ? 'product' : 'category'); }}>Создать</button>
+                  </div>
+                  {selectedCategory ? (<div className="admin-product-list">
+                    {selectedCategory.products?.length > 0 ? selectedCategory.products.map((product) => <article className="admin-product-item" key={product.id}>
+                      <img src={product.imageUrl} alt="" /><div><strong>{product.name}</strong><p>{product.description}</p></div><div className="admin-row-actions"><button type="button" className="admin-icon-button" title="Редактировать товар" onClick={() => startProductEdit(product)}>✎</button><button type="button" className="admin-icon-button danger" title="Удалить товар" onClick={() => void deleteCatalogItem('product', product.id, product.name)}>×</button></div>
+                    </article>) : <p className="admin-empty">В этой категории пока нет товаров.</p>}
+                  </div>) : (<div className="admin-category-list">
+                {isCatalogLoading && <p className="admin-empty">Загружаем каталог…</p>}
+                {!isCatalogLoading && categoriesState.length === 0 && <p className="admin-empty">Категорий пока нет. Создайте первую.</p>}
+                {categoriesState.map((category) => (
+                  <article key={category.id} className={`admin-category-item${category.id === selectedCategoryId ? ' category-selected' : ''}`}>
+                    <button type="button" className="admin-category-select" onClick={() => { setSelectedCategoryId(category.id); resetCategoryForm(); resetProductForm(); setAdminError(''); }}>
+                      <img src={category.imageUrl} alt="" /><span><strong>{category.name}</strong><small>{category.products?.length ?? 0} товаров</small></span>
+                    </button>
+                    <div className="admin-row-actions"><button type="button" className="admin-icon-button" title="Редактировать категорию" onClick={() => startCategoryEdit(category)}>✎</button><button type="button" className="admin-icon-button danger" title="Удалить категорию" onClick={() => void deleteCatalogItem('category', category.id, category.name)}>×</button></div>
+                  </article>
+                ))}
+              </div>)}
+                  {catalogModal && <CatalogModal busy={adminBusy} onClose={closeCatalogModal}>
+                    <h2>{catalogModal === 'category' ? (editingCategoryId ? 'Создать?Форма каталога?' : '??Форма каталога?') : (editingProductId ? 'Редактировать товар' : 'Создать товар')}</h2>
+                    {adminError && <p className="admin-error" role="alert">{adminError}</p>}
+                    {catalogModal === 'category' ? (<form className="admin-form" onSubmit={handleCategorySubmit}>
                 <label>
                   <span>Название категории</span>
                   <input
+                    autoFocus
                     type="text"
                     value={categoryForm.name}
                     onChange={(event) => setCategoryForm((prev) => ({ ...prev, name: event.target.value }))}
@@ -497,57 +678,40 @@ function App() {
                   />
                   {editingCategoryId && <small>Оставьте поле пустым, чтобы сохранить текущее изображение.</small>}
                 </label>
-                <button type="submit" className="admin-button" disabled={adminBusy}>{adminBusy ? 'Сохраняем…' : editingCategoryId ? 'Сохранить категорию' : 'Создать категорию'}</button>
-              </form>
-            </section>
-
-            <section className="admin-card">
-              <div className="admin-card-heading"><h2>Категории</h2><button type="button" className="admin-text-button" onClick={() => void fetchCategories()} disabled={isCatalogLoading || adminBusy}>Обновить</button></div>
-              <div className="admin-category-list">
-                {isCatalogLoading && <p className="admin-empty">Загружаем каталог…</p>}
-                {!isCatalogLoading && categoriesState.length === 0 && <p className="admin-empty">Категорий пока нет. Создайте первую.</p>}
-                {categoriesState.map((category) => (
-                  <article key={category.id} className={`admin-category-item${category.id === selectedCategoryId ? ' category-selected' : ''}`}>
-                    <button type="button" className="admin-category-select" onClick={() => { setSelectedCategoryId(category.id); resetCategoryForm(); resetProductForm(); }}>
-                      <img src={category.imageUrl} alt="" /><span><strong>{category.name}</strong><small>{category.products?.length ?? 0} товаров</small></span>
-                    </button>
-                    <div className="admin-row-actions"><button type="button" className="admin-icon-button" title="Редактировать категорию" onClick={() => startCategoryEdit(category)}>✎</button><button type="button" className="admin-icon-button danger" title="Удалить категорию" onClick={() => void deleteCatalogItem('category', category.id, category.name)}>×</button></div>
-                  </article>
-                ))}
-              </div>
-            </section>
-
-            {selectedCategory && (
-              <section className="admin-card admin-product-card">
-                <div className="admin-card-heading"><h2>{editingProductId ? `Редактировать товар: ${productForm.name}` : `Товары: «${selectedCategory.name}»`}</h2>{editingProductId && <button type="button" className="admin-text-button" onClick={resetProductForm}>Отмена</button>}</div>
-                <div className="admin-product-layout">
-                  <form className="admin-form" onSubmit={handleProductSubmit}>
-                    <label><span>Название товара</span><input type="text" value={productForm.name} onChange={(event) => setProductForm((prev) => ({ ...prev, name: event.target.value }))} required /></label>
+                <div className="admin-modal-actions"><button type="submit" className="admin-button" disabled={adminBusy}>{adminBusy ? 'Сохраняем…' : editingCategoryId ? 'Сохранить категорию' : 'Создать'}</button><button type="button" className="admin-link-button" disabled={adminBusy} onClick={closeCatalogModal}>Отмена</button></div>
+              </form>) : (<form className="admin-form" onSubmit={handleProductSubmit}>
+                    <label><span>Название товара</span><input autoFocus type="text" value={productForm.name} onChange={(event) => setProductForm((prev) => ({ ...prev, name: event.target.value }))} required /></label>
                     <label><span>Описание</span><textarea rows="4" value={productForm.description} onChange={(event) => setProductForm((prev) => ({ ...prev, description: event.target.value }))} required /></label>
                     <label><span>Изображение</span><input type="file" accept="image/*" onChange={(event) => setProductForm((prev) => ({ ...prev, image: event.target.files?.[0] ?? null }))} required={!editingProductId} />{editingProductId && <small>Новое изображение необязательно.</small>}</label>
-                    <button type="submit" className="admin-button" disabled={adminBusy}>{adminBusy ? 'Сохраняем…' : editingProductId ? 'Сохранить товар' : 'Добавить товар'}</button>
-                  </form>
-                  <div className="admin-product-list">
-                    {selectedCategory.products?.length > 0 ? selectedCategory.products.map((product) => <article className="admin-product-item" key={product.id}>
-                      <img src={product.imageUrl} alt="" /><div><strong>{product.name}</strong><p>{product.description}</p></div><div className="admin-row-actions"><button type="button" className="admin-icon-button" title="Редактировать товар" onClick={() => startProductEdit(product)}>✎</button><button type="button" className="admin-icon-button danger" title="Удалить товар" onClick={() => void deleteCatalogItem('product', product.id, product.name)}>×</button></div>
-                    </article>) : <p className="admin-empty">В этой категории пока нет товаров.</p>}
-                  </div>
-                </div>
-              </section>
-            )}
-                </div>
+                    <div className="admin-modal-actions"><button type="submit" className="admin-button" disabled={adminBusy}>{adminBusy ? 'Сохраняем…' : editingProductId ? 'Сохранить товар' : 'Создать'}</button><button type="button" className="admin-link-button" disabled={adminBusy} onClick={closeCatalogModal}>Отмена</button></div>
+                  </form>)}
+                  </CatalogModal>}
+                </section>
               )}
               {activeAdminSection === 'design' && (!activeDesignProject ? <section className="admin-card design-project-picker">
-                <div className="admin-card-heading"><h2>Проекты</h2><button type="button" className="admin-text-button" onClick={() => void fetchDesignProjects()} disabled={isDesignLoading}>Обновить</button></div>
-                <form className="design-new-project" onSubmit={createDesignProject}>
-                  <input type="text" value={newDesignProjectName} onChange={(event) => setNewDesignProjectName(event.target.value)} placeholder="Название нового проекта" maxLength="200" required />
-                  <button type="submit" className="admin-button" disabled={isDesignSaving}>{isDesignSaving ? 'Создаём…' : 'Создать проект'}</button>
-                </form>
-                {designError && <p className="admin-error">{designError}</p>}
-                {isDesignLoading ? <p className="admin-empty">Загружаем проекты…</p> : <div className="design-project-list">
-                  {designProjects.length === 0 ? <p className="admin-empty">Проектов пока нет. Создайте первый эскиз.</p> : designProjects.map((project) => <button type="button" key={project.id} onClick={() => void openDesignProject(project.id)}>
-                    <strong>{project.name}</strong><small>Изменён {new Date(project.updatedAt).toLocaleString('ru-RU')}</small>
-                  </button>)}
+                <div className="admin-card-heading admin-catalog-heading"><h2>Проекты</h2><button type="button" className="admin-button" onClick={() => { setEditingDesignProjectId(''); setNewDesignProjectName(''); setDesignError(''); setIsDesignCreateOpen(true); }} disabled={isDesignLoading || isDesignSaving}>Создать</button></div>
+                {isDesignCreateOpen && <CatalogModal label={editingDesignProjectId ? 'Параметры проекта' : 'Создать проект'} busy={isDesignSaving} onClose={() => { setIsDesignCreateOpen(false); setNewDesignProjectName(''); setDesignError(''); }}>
+                  <h2>{editingDesignProjectId ? 'Параметры проекта' : 'Создать проект'}</h2>
+                  <form className="admin-form" onSubmit={createDesignProject}>
+                    <label><span>Название проекта</span><input autoFocus type="text" value={newDesignProjectName} onChange={(event) => setNewDesignProjectName(event.target.value)} maxLength="200" disabled={isDesignSaving} required /></label>
+                    {designError && <p className="admin-error" role="alert">{designError}</p>}
+                    <div className="admin-modal-actions">
+                      <button type="submit" className="admin-button" disabled={isDesignSaving || !newDesignProjectName.trim()}>{isDesignSaving ? 'Сохраняем…' : editingDesignProjectId ? 'Сохранить' : 'Создать'}</button>
+                      <button type="button" className="admin-link-button" disabled={isDesignSaving} onClick={() => { setIsDesignCreateOpen(false); setNewDesignProjectName(''); setDesignError(''); }}>Отмена</button>
+                    </div>
+                  </form>
+                </CatalogModal>}
+                {designError && !isDesignCreateOpen && <p className="admin-error">{designError}</p>}
+                {isDesignLoading ? <p className="admin-empty">Загружаем проекты…</p> : <div className="admin-category-list">
+                  {designProjects.length === 0 ? <p className="admin-empty">Проектов пока нет. Создайте первый эскиз.</p> : designProjects.map((project) => <article className="admin-category-item" key={project.id}>
+                    <button type="button" className="admin-category-select" disabled={isDesignSaving} onClick={() => void openDesignProject(project.id)}>
+                      <span><strong>{project.name}</strong><small>Изменён {new Date(project.updatedAt).toLocaleString('ru-RU')}</small></span>
+                    </button>
+                    <div className="admin-row-actions">
+                      <button type="button" className="admin-icon-button" disabled={isDesignSaving} title="Редактировать параметры" aria-label={`Редактировать параметры проекта ${project.name}`} onClick={() => { setEditingDesignProjectId(project.id); setNewDesignProjectName(project.name); setDesignError(''); setIsDesignCreateOpen(true); }}>✎</button>
+                      <button type="button" className="admin-icon-button danger" disabled={isDesignSaving} title="Удалить проект" aria-label={`Удалить проект ${project.name}`} onClick={() => void deleteDesignProject(project)}>×</button>
+                    </div>
+                  </article>)}
                 </div>}
               </section> : <section className="design-project-editor">
                 <div className="design-project-header">
@@ -558,22 +722,44 @@ function App() {
                 </div>
                 {designError && <p className="admin-error">{designError}</p>}
                 <div className="design-workspace">
-                  <DesignEditor objects={designObjects} selectedId={selectedDesignObjectId} onSelect={setSelectedDesignObjectId} onChange={updateDesignObject} onDelete={deleteDesignObject} onAddObject={addDesignObject} />
+                  <DesignEditor onUndo={undoDesign} undoCount={undoCount} undoDisabled={isDesignInteracting} onActionStart={beginDesignAction} onActionEnd={endDesignAction} objects={designObjects} selectedId={selectedDesignObjectId} selectedIds={selectedDesignObjectIds} onSelect={setSelectedDesignObjectId} onChange={updateDesignObject} onChangeMany={updateDesignObjects} onDelete={deleteDesignObject} onAddObject={addDesignObject} onPasteObject={pasteDesignObject} onAddCoffeeTable={addCoffeeTable} onAddFirepitFurniture={addFirepitFurniture} onAddWorkshopFrame={addWorkshopFrame} onAddPool={addPool} onSaveScreenshot={saveSceneScreenshot} />
+                  <div className="design-side-panels">
+                  <section className="design-object-panel" aria-labelledby="design-objects-title">
+                    <div className="design-object-heading"><h2 id="design-objects-title">Объекты</h2><span>{designObjects.length}</span><button type="button" className="design-clear-objects" disabled={designObjects.length === 0} onClick={() => { if (window.confirm(`Удалить все объекты (${designObjects.length}) из текущего проекта?`)) deleteDesignObject(designObjects.map((object) => object.id)); }}>Удалить всё</button></div>
+                    {designObjects.length === 0 ? <p className="admin-empty">На канве пока нет объектов.</p> : <ul className="design-object-list">
+                      {designObjects.map((object) => <li key={object.id}>
+                        <button type="button" className={`design-object-select${selectedDesignObjectIds.includes(object.id) ? ' is-selected' : ''}`} aria-pressed={selectedDesignObjectIds.includes(object.id)} onClick={(event) => setSelectedDesignObjectId(object.id, event.ctrlKey || event.metaKey)}>
+                          <span className="design-object-swatch" style={{ backgroundColor: object.color || '#f8f8f6' }} aria-hidden="true" />
+                          <span className="design-object-info"><strong>{object.name}</strong><small>{object.type === 'sphere' ? 'Шар' : object.type === 'cube' ? 'Куб' : 'Параллелепипед'}</small></span>
+                          {selectedDesignObjectIds.includes(object.id) && <span className="design-object-check" aria-hidden="true">✓</span>}
+                        </button>
+                        <button type="button" className="design-object-delete" title={`Удалить ${object.name}`} aria-label={`Удалить ${object.name}`} onClick={() => deleteDesignObject(object.id)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 11v6M14 11v6" /></svg></button>
+                      </li>)}
+                    </ul>}
+                    {designObjects.length > 1 && <p className="design-object-tip">Ctrl + клик — выбрать несколько</p>}
+                  </section>
                   <aside className="design-properties">
                     {selectedDesignObject ? <>
-                      <h2>Свойства объекта</h2>
+                      <h2>{selectedDesignObjectIds.length > 1 ? `Выбрано объектов: ${selectedDesignObjectIds.length}` : 'Свойства объекта'}</h2>
+                      {selectedDesignObjectIds.length > 1 && <p className="admin-empty">Манипулятор управляет всей группой. Ниже — параметры последнего выбранного объекта.</p>}
                       <label><span>Название</span><input type="text" value={selectedDesignObject.name} onChange={(event) => updateDesignObject(selectedDesignObject.id, { name: event.target.value })} /></label>
                       <label><span>Цвет</span><input type="color" value={selectedDesignObject.color || '#8b6b4d'} onChange={(event) => updateDesignObject(selectedDesignObject.id, { color: event.target.value })} /></label>
+                      <div className="design-properties-pair">
                       <fieldset><legend>Размеры, мм</legend>
-                        <label><span>Длина</span><input type="number" min="10" step="1" value={selectedDesignObject.dimensions?.length ?? 1000} onChange={(event) => updateDesignObject(selectedDesignObject.id, { dimensions: { ...selectedDesignObject.dimensions, length: Math.max(10, Number(event.target.value)) } })} /></label>
-                        <label><span>Ширина</span><input type="number" min="10" step="1" value={selectedDesignObject.dimensions?.width ?? 600} onChange={(event) => updateDesignObject(selectedDesignObject.id, { dimensions: { ...selectedDesignObject.dimensions, width: Math.max(10, Number(event.target.value)) } })} /></label>
-                        <label><span>Высота</span><input type="number" min="10" step="1" value={selectedDesignObject.dimensions?.height ?? 500} onChange={(event) => updateDesignObject(selectedDesignObject.id, { dimensions: { ...selectedDesignObject.dimensions, height: Math.max(10, Number(event.target.value)) } })} /></label>
+                        <label><span>Длина</span><CommittedNumberInput key={`${selectedDesignObject.id}-length`} minimumExclusive={10} value={selectedDesignObject.dimensions?.length ?? 1000} onCommit={(length) => updateDesignObject(selectedDesignObject.id, { dimensions: { ...selectedDesignObject.dimensions, length } })} /></label>
+                        <label><span>Ширина</span><CommittedNumberInput key={`${selectedDesignObject.id}-width`} minimumExclusive={10} value={selectedDesignObject.dimensions?.width ?? 600} onCommit={(width) => updateDesignObject(selectedDesignObject.id, { dimensions: { ...selectedDesignObject.dimensions, width } })} /></label>
+                        <label><span>Высота</span><CommittedNumberInput key={`${selectedDesignObject.id}-height`} minimumExclusive={10} value={selectedDesignObject.dimensions?.height ?? 500} onCommit={(height) => updateDesignObject(selectedDesignObject.id, { dimensions: { ...selectedDesignObject.dimensions, height } })} /></label>
                       </fieldset>
                       <fieldset><legend>Поворот, °</legend>
-                        {['x', 'y', 'z'].map((axis) => <label key={axis}><span>{axis.toUpperCase()}</span><input type="number" step="1" value={selectedDesignObject.rotation?.[axis] ?? 0} onChange={(event) => updateDesignObject(selectedDesignObject.id, { rotation: { ...selectedDesignObject.rotation, [axis]: Number(event.target.value) } })} /></label>)}
+                        {['x', 'y', 'z'].map((axis) => <label key={axis}><span>{axis.toUpperCase()}</span><CommittedNumberInput key={`${selectedDesignObject.id}-${axis}`} precision={2} value={selectedDesignObject.rotation?.[axis] ?? 0} onCommit={(angle) => updateDesignObject(selectedDesignObject.id, { rotation: { ...selectedDesignObject.rotation, [axis]: angle } })} /></label>)}
+                      </fieldset>
+                      </div>
+                      <fieldset className="design-distance-fields"><legend>Расстояние до плоскостей, мм</legend>
+                        {planeDistances(selectedDesignObject).map(({ axis, plane, distance }) => <label key={axis}><span>{plane} ({axis.toUpperCase()})</span><CommittedNumberInput key={`${selectedDesignObject.id}-distance-${axis}`} minimumExclusive={-Number.EPSILON} value={Math.round(distance * 1000) / 1000} onCommit={(next) => updateDesignObject(selectedDesignObject.id, { position: positionAtPlaneDistance(selectedDesignObject, axis, next) })} /></label>)}
                       </fieldset>
                     </> : <p className="admin-empty">Выберите объект на сцене, чтобы изменить его свойства.</p>}
                   </aside>
+                  </div>
                 </div>
               </section>)}
             </div>
@@ -581,7 +767,7 @@ function App() {
         )}
 
         {adminMessage && <p className="admin-message">{adminMessage}</p>}
-        {adminError && adminToken && <p className="admin-error">{adminError}</p>}
+        {adminError && adminToken && !catalogModal && <p className="admin-error">{adminError}</p>}
       </main>
     );
   }

@@ -8,5 +8,6 @@ public interface IDesignProjectRepository
     Task<DesignProject?> GetProject(Guid id, CancellationToken cancellationToken = default);
     Task<DesignProject?> GetProjectForUpdate(Guid id, CancellationToken cancellationToken = default);
     void Add(DesignProject project);
+    void Remove(DesignProject project);
     Task SaveChanges(CancellationToken cancellationToken = default);
 }

@@ -2,32 +2,37 @@ name: mwworks-app
 
 services:
   backend:
-    build:
-      context: ../backend
-      dockerfile: Dockerfile
-    image: mwworks-backend:latest
+    image: mwworks-backend:${APP_VERSION:?Set APP_VERSION in deploy/.env}
     container_name: mwworks-backend
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=mwworks;Username=postgres;Password=Tgbyhn123
+      ASPNETCORE_ENVIRONMENT: Production
+      Screenshots__Directory: /app/screenshots
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=mwworks;Username=postgres;Password=_UU02cocs
       ImageApi__UploadApiKey: change-this-key
+    volumes:
+      - ../screenshots:/app/screenshots
     ports:
       - "5000:8080"
+    networks:
+      - mwworks-network
+      - danetwork
     restart: unless-stopped
 
   frontend:
-    build:
-      context: ../react-app
-      dockerfile: Dockerfile
-    image: mwworks-frontend:latest
+    image: mwworks-frontend:${APP_VERSION:?Set APP_VERSION in deploy/.env}
     container_name: mwworks-frontend
     depends_on:
       - backend
     ports:
       - "5173:80"
+    networks:
+      - mwworks-network
     restart: unless-stopped
 
 networks:
-  default:
+  mwworks-network:
+    name: mwworks-network
+    driver: bridge
+  danetwork:
     name: danetwork
     external: true

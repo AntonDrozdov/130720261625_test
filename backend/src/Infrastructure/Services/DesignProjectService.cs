@@ -8,6 +8,25 @@ public sealed class DesignProjectService(IDesignProjectRepository repository) : 
 {
     private const string EmptyScene = "{\"objects\":[]}";
 
+    public async Task<DesignProject?> Rename(Guid id, string name, CancellationToken cancellationToken = default)
+    {
+        var project = await repository.GetProjectForUpdate(id, cancellationToken);
+        if (project is null) return null;
+        project.Name = name.Trim();
+        project.UpdatedAt = DateTimeOffset.UtcNow;
+        await repository.SaveChanges(cancellationToken);
+        return project;
+    }
+
+    public async Task<bool> Delete(Guid id, CancellationToken cancellationToken = default)
+    {
+        var project = await repository.GetProjectForUpdate(id, cancellationToken);
+        if (project is null) return false;
+        repository.Remove(project);
+        await repository.SaveChanges(cancellationToken);
+        return true;
+    }
+
     public Task<IReadOnlyList<DesignProject>> GetProjects(CancellationToken cancellationToken = default)
         => repository.GetProjects(cancellationToken);
 

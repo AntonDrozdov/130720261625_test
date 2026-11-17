@@ -18,6 +18,7 @@ public sealed class DesignProjectRepository(ApplicationDbContext dbContext) : ID
         => dbContext.DesignProjects.SingleOrDefaultAsync(project => project.Id == id, cancellationToken);
 
     public void Add(DesignProject project) => dbContext.DesignProjects.Add(project);
+    public void Remove(DesignProject project) => dbContext.DesignProjects.Remove(project);
 
     public Task SaveChanges(CancellationToken cancellationToken = default) => dbContext.SaveChangesAsync(cancellationToken);
 }
